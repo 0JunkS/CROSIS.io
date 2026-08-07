@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Get Navigated - 탕탕특공대 스타일 멀티 서바이벌</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Fredoka:wght@600;900&family=Orbitron:wght@700;900&family=Noto+Sans+KR:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-container">
+    <!-- Main Game Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Screen Flash Overlay -->
+    <div id="screen-flash"></div>
+
+    <!-- 탕탕특공대 스타일 REAL HOME LOBBY SCREEN -->
+    <div id="main-menu" class="survivor-home-screen">
+      
+      <!-- TOP HEADER BAR -->
+      <div class="top-header-bar">
+        <!-- Top Left: Level Badge & User Profile (Google Auth) -->
+        <div class="top-profile-zone">
+          <div class="level-ribbon">
+            <span id="header-user-level">1</span>
+          </div>
+
+          <!-- Auth Profile -->
+          <div id="auth-logged-in" class="header-profile-box hidden">
+            <img id="user-avatar-img" src="" alt="Avatar" class="header-avatar-pic hidden">
+            <span id="user-avatar-fallback" class="header-avatar-emoji">🏹</span>
+            <span id="user-name" class="header-username">화살표 용사</span>
+            <button id="logout-btn" class="btn-header-logout">로그아웃</button>
+          </div>
+
+          <div id="auth-logged-out" class="header-auth-buttons">
+            <button id="google-login-btn" class="btn-header-auth google">🌐 Google 로그인</button>
+            <button id="guest-login-btn" class="btn-header-auth guest">👤 게스트</button>
+          </div>
+        </div>
+
+        <!-- Top Right: Currencies & Utility Icons -->
+        <div class="top-right-zone">
+          <div class="currency-badge energy-badge" id="btn-energy-shop">
+            <span class="curr-icon">⚡</span>
+            <span class="curr-val" id="user-energy">26/30</span>
+            <button class="plus-btn">+</button>
+          </div>
+          <div class="currency-badge gem-badge" id="btn-gem-shop">
+            <span class="curr-icon">💎</span>
+            <span class="curr-val" id="user-gem">1,920</span>
+            <button class="plus-btn">+</button>
+          </div>
+          <div class="currency-badge gold-badge" id="btn-gold-shop">
+            <span class="curr-icon">🪙</span>
+            <span class="curr-val" id="user-gold">30.4K</span>
+            <button class="plus-btn">+</button>
+          </div>
+          <div class="top-action-icons">
+            <button id="btn-friends-modal" class="icon-header-btn" title="친구 목록">👥</button>
+            <button id="menu-guide-btn" class="icon-header-btn">⚙️</button>
+            <button id="btn-mailbox" class="icon-header-btn">✉️</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MAIN LOBBY MIDDLE SECTION -->
+      <div class="lobby-middle-container">
+        
+        <!-- LEFT SIDE VERTICAL BUTTON RIBBON (UNIQUE IMAGE ICONS) -->
+        <div class="side-ribbon left-ribbon">
+          <button class="side-icon-btn" id="btn-gift">
+            <img src="assets/icon_gift.jpg" alt="Gift" class="side-img-icon">
+            <span class="side-label">선물</span>
+          </button>
+          <button class="side-icon-btn" id="btn-pass">
+            <img src="assets/icon_pass.jpg" alt="Pass" class="side-img-icon">
+            <span class="side-label">패스</span>
+          </button>
+          <button class="side-icon-btn" id="btn-growth">
+            <img src="assets/icon_growth.jpg" alt="Growth" class="side-img-icon">
+            <span class="side-label">성장</span>
+          </button>
+          <button class="side-icon-btn" id="btn-shop">
+            <img src="assets/icon_multi_arrow.jpg" alt="Shop" class="side-img-icon">
+            <span class="side-label">상점</span>
+          </button>
+          <button class="side-icon-btn highlight-btn" id="btn-piggy">
+            <img src="assets/icon_piggy.jpg" alt="Piggy" class="side-img-icon">
+            <span class="side-label">저금통</span>
+            <span class="red-dot">!</span>
+          </button>
+        </div>
+
+        <!-- CENTER STAGE DISPLAY AREA -->
+        <div class="center-stage-area" id="hub-main-view">
+          <h1 class="chapter-title-text" id="hub-stage-name">1. 초원 버그 대습격</h1>
+          <p class="chapter-sub-text">최장 생존시간: <span id="best-score-time">0초</span> (목표: <span id="hub-stage-target">10마리 처치</span>)</p>
+
+          <!-- Stage Facility Illustration -->
+          <div class="stage-facility-box">
+            <img src="assets/logo_banner.jpg" alt="Stage Container" class="facility-img">
+            <div class="facility-barrier-line"></div>
+          </div>
+
+          <!-- Quick Feature Buttons -->
+          <div class="quick-feature-row">
+            <button class="feature-sub-btn" id="btn-chapter-chest">
+              <span class="feature-icon">🧰</span>
+              <span class="feature-text">보물상자</span>
+            </button>
+            <button class="feature-sub-btn" id="btn-patrol">
+              <span class="feature-icon">🕒</span>
+              <span class="feature-text">빠른 순찰</span>
+            </button>
+          </div>
+
+          <!-- BATTLE START ROW -->
+          <div class="battle-start-row">
+            <button class="event-side-btn" id="btn-daily-challenge">
+              <span class="btn-event-icon">🥊</span>
+              <span class="btn-event-label">일일 도전</span>
+            </button>
+
+            <!-- BIG YELLOW 3D PLAY BUTTON -->
+            <button id="menu-start-btn" class="survivor-play-btn">
+              <span class="play-btn-title">게임 시작</span>
+              <span class="play-btn-energy">⚡ x 5</span>
+            </button>
+
+            <button class="event-side-btn" id="btn-daily-event">
+              <span class="btn-event-icon">🗺️</span>
+              <span class="btn-event-label">일일 이벤트</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- RIGHT SIDE VERTICAL BUTTON RIBBON -->
+        <div class="side-ribbon right-ribbon">
+          <button class="side-icon-btn" id="btn-echo">
+            <img src="assets/icon_echo.jpg" alt="Echo" class="side-img-icon">
+            <span class="side-label">에코</span>
+          </button>
+          <button class="side-icon-btn" id="btn-quiz">
+            <img src="assets/icon_quiz.jpg" alt="Quiz" class="side-img-icon">
+            <span class="side-label">퀴즈</span>
+          </button>
+          <button class="side-icon-btn highlight-btn" id="btn-achievements">
+            <img src="assets/icon_orbit_shield.jpg" alt="Achievements" class="side-img-icon">
+            <span class="side-label">업적</span>
+            <span class="check-dot">✓</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- BOTTOM NAVIGATION BAR (5 TABS) -->
+      <div class="survivor-bottom-nav">
+        <button class="bottom-tab-item" id="tab-shop">
+          <span class="tab-emoji">🏪</span>
+          <span class="tab-name">상점</span>
+        </button>
+        <button class="bottom-tab-item" id="tab-equip">
+          <span class="tab-emoji">🔫</span>
+          <span class="tab-name">장비</span>
+        </button>
+
+        <button class="bottom-tab-item active-battle-tab" id="tab-battle">
+          <div class="center-star-box">
+            <span class="star-icon">⭐</span>
+          </div>
+          <span class="tab-name">전투</span>
+        </button>
+
+        <button class="bottom-tab-item" id="tab-heroes">
+          <span class="tab-emoji">💀</span>
+          <span class="tab-name">특공대</span>
+        </button>
+        <button class="bottom-tab-item" id="tab-lab">
+          <span class="tab-emoji">🧪</span>
+          <span class="tab-name">연구소</span>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- FRIENDS & SOCIAL MODAL (친구 시스템) -->
+    <div id="friends-modal" class="modal hidden">
+      <div class="modal-content glass-card cute-modal social-modal">
+        <h2 class="modal-title aaa-header">👥 친구 & 실시간 친선전</h2>
+        
+        <div class="friends-tab-row">
+          <button id="ftab-list" class="ftab active">친구 목록</button>
+          <button id="ftab-add" class="ftab">친구 추가</button>
+          <button id="ftab-chat" class="ftab">쪽지/메시지</button>
+          <button id="ftab-pvp" class="ftab">1v1 친선 대결</button>
+        </div>
+
+        <!-- Friend List Tab Content -->
+        <div id="fview-list" class="fview-section">
+          <div class="friends-list-container" id="friends-list-box">
+            <div class="friend-row">
+              <span class="status-indicator online">🟢</span>
+              <span class="friend-name">용사123</span>
+              <span class="friend-status-text">온라인</span>
+              <button class="btn-friend-action pvp-invite-btn" data-name="용사123">친선전 신청</button>
+            </div>
+            <div class="friend-row">
+              <span class="status-indicator ingame">🎮</span>
+              <span class="friend-name">버그헌터</span>
+              <span class="friend-status-text">1스테이지 플레이 중</span>
+              <button class="btn-friend-action disabled">전투 중</button>
+            </div>
+            <div class="friend-row">
+              <span class="status-indicator offline">🔴</span>
+              <span class="friend-name">궁극기마스터</span>
+              <span class="friend-status-text">오프라인</span>
+              <button class="btn-friend-action msg-btn" data-name="궁극기마스터">쪽지 보내기</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add Friend Tab Content -->
+        <div id="fview-add" class="fview-section hidden">
+          <div class="add-friend-box">
+            <input type="text" id="friend-search-input" placeholder="친구 닉네임 또는 코드 입력..." class="modal-input">
+            <button id="btn-search-friend" class="btn-primary-small">검색 & 신청</button>
+          </div>
+          <p class="sub-hint">내 친구 코드: <strong id="my-friend-code">ARROW-8892</strong></p>
+        </div>
+
+        <!-- Direct Message Chat Tab Content -->
+        <div id="fview-chat" class="fview-section hidden">
+          <div class="chat-history-box" id="chat-messages-container">
+            <div class="chat-msg system">친구에게 메세지를 남겨보세요!</div>
+          </div>
+          <div class="chat-input-row">
+            <input type="text" id="chat-input" placeholder="메세지 입력..." class="modal-input">
+            <button id="btn-send-chat" class="btn-primary-small">전송</button>
+          </div>
+        </div>
+
+        <!-- 1v1 Friendly PvP Match Tab Content -->
+        <div id="fview-pvp" class="fview-section hidden">
+          <div class="pvp-room-box">
+            <h3>⚔️ 1대1 무제한 친선 대결</h3>
+            <p>친구와 랭크 점수 변동 없는 실시간 1v1 전투를 즐기세요!</p>
+            <div class="room-code-display">
+              <span>방 코드: <strong id="pvp-room-code">PVP-9021</strong></span>
+            </div>
+            <button id="btn-create-pvp" class="btn-battle-play small-battle">방 생성 & 대기</button>
+          </div>
+        </div>
+
+        <button id="close-friends-btn" class="btn-guide-aaa">닫기</button>
+      </div>
+    </div>
+
+    <!-- GENERAL GENERIC MODAL (Used for Gifts, Pass, Growth, Piggy, Quiz, Chest, Patrol, etc.) -->
+    <div id="generic-modal" class="modal hidden">
+      <div class="modal-content glass-card cute-modal">
+        <h2 class="modal-title aaa-header" id="gen-modal-title">보상 수령</h2>
+        <div id="gen-modal-body" class="modal-body-content">
+          <!-- Populated dynamically via JS -->
+        </div>
+        <button id="gen-modal-claim" class="btn-play-aaa small margin-top">수령하기 (CLAIM)</button>
+        <button id="close-generic-btn" class="btn-guide-aaa">닫기</button>
+      </div>
+    </div>
+
+    <!-- GUIDE MODAL -->
+    <div id="guide-modal" class="modal hidden">
+      <div class="modal-content glass-card cute-modal">
+        <h2 class="modal-title aaa-header">🎮 게임 가이드</h2>
+        <div class="instructions cute-inst">
+          <div class="inst-item"><span class="inst-icon">🕹️</span> <strong>PC 이동</strong>: WASD / 방향키</div>
+          <div class="inst-item"><span class="inst-icon">📱</span> <strong>모바일 이동</strong>: 좌측 하단 가상 조이스틱</div>
+          <div class="inst-item"><span class="inst-icon">🎯</span> <strong>스테이지 클리어</strong>: 목표 마릿수 처치 시 클리어!</div>
+          <div class="inst-item"><span class="inst-icon">💥</span> <strong>궁극기 (SPACE / 터치)</strong>: 게이지 100% 충전 시 차원 유도 폭격!</div>
+          <div class="inst-item"><span class="inst-icon">🏃</span> <strong>속도 가속</strong>: 시간이 지날수록 벌레들의 이동 속도가 빨라집니다!</div>
+        </div>
+        <button id="close-guide-btn" class="btn-guide-aaa">닫기 (CLOSE)</button>
+      </div>
+    </div>
+
+    <!-- IN-GAME HUD -->
+    <div id="hud" class="hidden">
+      <!-- Top Bar -->
+      <div class="hud-top">
+        <div class="hud-box stage-badge">
+          <span class="label">STAGE</span>
+          <span id="stage-val">1</span>
+        </div>
+        
+        <div class="hud-box objective-badge">
+          <span class="label">TARGET</span>
+          <span id="target-counter">0 / 10</span>
+        </div>
+
+        <div class="hud-box timer-box">
+          <span id="timer-val">00:00</span>
+        </div>
+      </div>
+
+      <!-- XP Bar -->
+      <div class="xp-container">
+        <div class="xp-bar-bg">
+          <div id="xp-bar-fill"></div>
+        </div>
+        <span id="level-badge">LV 1</span>
+      </div>
+
+      <!-- Boss HP Bar -->
+      <div id="boss-hp-container" class="hidden">
+        <div class="boss-name">⚠️ DEEP-VOID BUG KING ⚠️</div>
+        <div class="boss-hp-bg">
+          <div id="boss-hp-fill"></div>
+        </div>
+        <div id="boss-hp-text">100%</div>
+      </div>
+
+      <!-- Bottom Bar -->
+      <div class="hud-bottom">
+        <div class="hp-section">
+          <div class="hp-bar-bg">
+            <div id="hp-bar-fill"></div>
+          </div>
+          <span id="hp-text">100 / 100</span>
+        </div>
+
+        <div id="ult-container">
+          <button id="ult-button" disabled>
+            <div class="ult-icon">⚡</div>
+            <div class="ult-text">
+              <span class="ult-title">궁극기 (SPACE)</span>
+              <span class="ult-sub">DIMENSION OVERDRIVE</span>
+            </div>
+          </button>
+          <div class="ult-bar-bg">
+            <div id="ult-bar-fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mobile Joystick Zone -->
+      <div id="joystick-zone">
+        <div id="joystick-base">
+          <div id="joystick-stick"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Boss Warning Banner -->
+    <div id="boss-warning" class="hidden">
+      <div class="warning-text">WARNING</div>
+      <div class="warning-sub">대형 보스 몬스터 등장!</div>
+    </div>
+
+    <!-- Ultimate Banner -->
+    <div id="ult-banner" class="hidden">
+      <div class="ult-banner-content">
+        <h1>💥 궁극기 발동! 💥</h1>
+        <h2>DIMENSION ARROW OVERDRIVE</h2>
+      </div>
+    </div>
+
+    <!-- Skill Selection Modal -->
+    <div id="skill-modal" class="modal hidden">
+      <div class="modal-content glass-card cute-modal">
+        <h2 class="modal-title aaa-header">✨ LEVEL UP! ✨</h2>
+        <p class="modal-sub">강화할 스킬을 선택하세요</p>
+        <div id="skill-cards-container"></div>
+      </div>
+    </div>
+
+    <!-- STAGE CLEAR VICTORY MODAL -->
+    <div id="stage-clear-modal" class="modal hidden">
+      <div class="modal-content glass-card cute-modal victory-card">
+        <h1 class="modal-title victory-title">🎉 STAGE CLEAR! 🎉</h1>
+        <p class="victory-sub" id="clear-stage-name">STAGE 1 클리어 성공!</p>
+        
+        <div class="reward-box">
+          <div class="reward-item">🪙 +<span id="reward-gold">100</span> 골드</div>
+          <div class="reward-item">💎 +<span id="reward-gem">10</span> 보석</div>
+        </div>
+
+        <div class="aaa-menu-buttons horizontal">
+          <button id="next-stage-btn" class="btn-play-aaa small">다음 스테이지로 ➔</button>
+          <button id="victory-home-btn" class="btn-guide-aaa">홈으로</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game Over Modal -->
+    <div id="gameover-modal" class="modal hidden">
+      <div class="modal-content glass-card cute-modal">
+        <h1 class="modal-title danger">GAME OVER</h1>
+        <div class="result-stats">
+          <p>스테이지 진행: <span id="final-stage">STAGE 1</span></p>
+          <p>처치한 벌레: <span id="final-kills">0</span></p>
+          <p>생존 시간: <span id="final-time">00:00</span></p>
+        </div>
+        <div class="aaa-menu-buttons horizontal">
+          <button id="restart-btn" class="btn-play-aaa small">다시 도전</button>
+          <button id="to-menu-btn" class="btn-guide-aaa">메인 메뉴</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Socket.io & Firebase SDKs -->
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+
+  <!-- Audio & Game Engine Scripts -->
+  <script src="sound.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

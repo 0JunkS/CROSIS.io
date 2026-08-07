@@ -1,0 +1,16 @@
+{
+  "name": "get-navigated-game",
+  "version": "1.0.0",
+  "description": "Get Navigated - Arrow Survival & Realtime 1v1 PvP Game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.4"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
