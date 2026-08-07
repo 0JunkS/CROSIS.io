@@ -1,5 +1,5 @@
 // ==========================================
-// GET NAVIGATED - FULL MULTIPLAYER & SURVIVAL ENGINE
+// GET NAVIGATED - STARR DROP GACHA & 40s 1v1 ARENA ENGINE
 // ==========================================
 
 const canvas = document.getElementById('gameCanvas');
@@ -59,24 +59,93 @@ let loadedCount = 0;
   };
 });
 
-// --- Game State & User Resources ---
+// --- Game State & Resources ---
 const GameState = {
   MAIN_MENU: 'MAIN_MENU',
   PLAYING: 'PLAYING',
+  PAUSED: 'PAUSED',
   LEVEL_UP: 'LEVEL_UP',
   STAGE_CLEAR: 'STAGE_CLEAR',
   GAME_OVER: 'GAME_OVER'
 };
 
 let currentState = GameState.MAIN_MENU;
+let currentMatchMode = 'PVE'; // 'PVE', 'PVP_RANKED', 'PVP_NORMAL'
 
 let userGold = Number(localStorage.getItem('get_nav_gold')) || 30400;
 let userGem = Number(localStorage.getItem('get_nav_gem')) || 1920;
 let userEnergy = 26;
 
+let bonusAtk = Number(localStorage.getItem('get_nav_bonus_atk')) || 0;
+let bonusHp = Number(localStorage.getItem('get_nav_bonus_hp')) || 0;
+
 let currentStage = Number(localStorage.getItem('get_nav_current_stage')) || 1;
 let stageTargetKills = 10 + (currentStage - 1) * 5;
 let stageKills = 0;
+
+// 1v1 PvP 40s Build Phase & Narrow Arena Timers
+let pvpBuildTimer = 40;
+let isPvpNarrowArenaActive = false;
+
+// --- 5-RANK EQUIPMENT SYSTEM (S, A, B, C, D) ---
+const RankStats = {
+  'S': { def: 250, hp: 1200, colorClass: 'rank-s', label: 'S등급 (전설)', maxTaps: 5 },
+  'A': { def: 100, hp: 500, colorClass: 'rank-a', label: 'A등급 (영웅)', maxTaps: 4 },
+  'B': { def: 50, hp: 250, colorClass: 'rank-b', label: 'B등급 (희귀)', maxTaps: 3 },
+  'C': { def: 25, hp: 120, colorClass: 'rank-c', label: 'C등급 (고급)', maxTaps: 2 },
+  'D': { def: 10, hp: 50, colorClass: 'rank-d', label: 'D등급 (일반)', maxTaps: 1 }
+};
+
+const SlotTypes = {
+  HELMET: { name: '헬멧', icon: 'assets/helmet.svg' },
+  ARMOR: { name: '몸통 방어구', icon: 'assets/armor.svg' },
+  LEGGINGS: { name: '다리 방어구', icon: 'assets/leggings.svg' },
+  BOOTS: { name: '부츠', icon: 'assets/boots.svg' }
+};
+
+let inventory = JSON.parse(localStorage.getItem('get_nav_inventory')) || [];
+let equippedGear = JSON.parse(localStorage.getItem('get_nav_equipped')) || {
+  HELMET: null,
+  ARMOR: null,
+  LEGGINGS: null,
+  BOOTS: null
+};
+
+// --- 7-TIER RANKING SYSTEM ---
+let placementWins = Number(localStorage.getItem('get_nav_placements_wins')) || 0;
+let placementsCompleted = Number(localStorage.getItem('get_nav_placements_completed')) || 0;
+let userMMR = Number(localStorage.getItem('get_nav_mmr')) || 0;
+
+const TierList = [
+  { name: '플라스틱 (PLASTIC)', minMMR: 0, badge: 'assets/tier_plastic.svg' },
+  { name: '브론즈 (BRONZE)', minMMR: 500, badge: 'assets/tier_bronze.svg' },
+  { name: '실버 (SILVER)', minMMR: 1000, badge: 'assets/tier_silver.svg' },
+  { name: '골드 (GOLD)', minMMR: 1500, badge: 'assets/tier_gold.svg' },
+  { name: '다이아몬드 (DIAMOND)', minMMR: 2000, badge: 'assets/tier_diamond.svg' },
+  { name: '세던 (SEDAN)', minMMR: 2500, badge: 'assets/tier_sedan.svg' },
+  { name: '크로시스 (CROSIS)', minMMR: 3000, badge: 'assets/tier_crosis.svg' }
+];
+
+function getCurrentTierInfo() {
+  if (placementsCompleted < 3) {
+    return {
+      name: `플라스틱 (배치고사 중)`,
+      placementText: `배치고사: ${placementsCompleted} / 3 완료`,
+      badge: 'assets/tier_plastic.svg'
+    };
+  }
+
+  for (let i = TierList.length - 1; i >= 0; i--) {
+    if (userMMR >= TierList[i].minMMR) {
+      return {
+        name: TierList[i].name,
+        placementText: `MMR: ${userMMR}`,
+        badge: TierList[i].badge
+      };
+    }
+  }
+  return { name: TierList[0].name, placementText: `MMR: ${userMMR}`, badge: TierList[0].badge };
+}
 
 // --- Camera & Screen Shake ---
 const camera = { x: 0, y: 0 };
@@ -88,7 +157,7 @@ function triggerScreenShake(intensity = 10, duration = 15) {
   screenShakeTimer = duration;
 }
 
-// --- Player Object ---
+// --- Player 1 (You) ---
 const player = {
   x: 0,
   y: 0,
@@ -115,11 +184,24 @@ const player = {
     magnet: 0
   },
 
-  shootTimer: 0,
-  laserTimer: 0,
-  missileTimer: 0,
-  strikeTimer: 0
+  shootTimer: 0
 };
+
+// --- Player 2 (1v1 Opponent) ---
+let opponentPlayer = null;
+
+function createOpponentPlayer() {
+  opponentPlayer = {
+    x: 180,
+    y: 180,
+    radius: 24,
+    speed: 4.5,
+    hp: 120,
+    maxHp: 120,
+    angle: 0,
+    shootTimer: 0
+  };
+}
 
 // --- Game Entities Arrays ---
 let mobs = [];
@@ -131,14 +213,14 @@ let damageTexts = [];
 let bloodSplatters = [];
 let boss = null;
 
-// --- Timers & Stats ---
+// Timers & Stats
 let gameTime = 0;
 let mobSpawnTimer = 0;
 let bossSpawned = false;
 let bestKills = localStorage.getItem('get_nav_best_kills') || 0;
 let bestTime = localStorage.getItem('get_nav_best_time') || 0;
 
-// --- Socket.io Multiplayer & Friends Realtime Client ---
+// Socket.io Client
 let socket = null;
 if (typeof io !== 'undefined') {
   socket = io();
@@ -159,35 +241,20 @@ if (typeof io !== 'undefined') {
   });
 }
 
-// --- Controls ---
+// Controls
 const keys = {};
 const mouse = { x: 0, y: 0, worldX: 0, worldY: 0 };
-const joystick = {
-  active: false,
-  touchId: null,
-  startX: 0,
-  startY: 0,
-  vectorX: 0,
-  vectorY: 0
-};
+const joystick = { active: false, touchId: null, startX: 0, startY: 0, vectorX: 0, vectorY: 0 };
 
 window.addEventListener('keydown', e => {
   sounds.init();
   keys[e.code] = true;
-  if (e.code === 'Space') {
-    e.preventDefault();
-    activateUltimate();
-  }
+  if (e.code === 'Space') { e.preventDefault(); activateUltimate(); }
+  if (e.code === 'Escape' && currentState === GameState.PLAYING && currentMatchMode === 'PVE') { togglePauseGame(); }
 });
 
-window.addEventListener('keyup', e => {
-  keys[e.code] = false;
-});
-
-window.addEventListener('mousemove', e => {
-  mouse.x = e.clientX;
-  mouse.y = e.clientY;
-});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
 
 // Touch Joystick Setup
 const joystickZone = document.getElementById('joystick-zone');
@@ -210,20 +277,14 @@ if (joystickZone) {
     if (!joystick.active) return;
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i];
-      if (touch.identifier === joystick.touchId) {
-        updateJoystickPos(touch.clientX, touch.clientY);
-        break;
-      }
+      if (touch.identifier === joystick.touchId) { updateJoystickPos(touch.clientX, touch.clientY); break; }
     }
   });
 
   window.addEventListener('touchend', e => {
     if (!joystick.active) return;
     for (let i = 0; i < e.changedTouches.length; i++) {
-      if (e.changedTouches[i].identifier === joystick.touchId) {
-        resetJoystick();
-        break;
-      }
+      if (e.changedTouches[i].identifier === joystick.touchId) { resetJoystick(); break; }
     }
   });
 
@@ -255,10 +316,7 @@ function resetJoystick() {
 }
 
 window.addEventListener('resize', resizeCanvas);
-function resizeCanvas() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
+function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
 resizeCanvas();
 
 // --- DOM Bindings & Modals ---
@@ -275,6 +333,14 @@ const ui = {
   userGold: document.getElementById('user-gold'),
   userGem: document.getElementById('user-gem'),
 
+  userTierBadgeImg: document.getElementById('user-tier-badge-img'),
+  userTierName: document.getElementById('user-tier-name'),
+  userTierPlacement: document.getElementById('user-tier-placement'),
+
+  modalTierBadge: document.getElementById('modal-tier-badge'),
+  modalTierName: document.getElementById('modal-tier-name'),
+  modalPlacementText: document.getElementById('modal-placement-text'),
+
   authLoggedOut: document.getElementById('auth-logged-out'),
   authLoggedIn: document.getElementById('auth-logged-in'),
   googleLoginBtn: document.getElementById('google-login-btn'),
@@ -288,7 +354,34 @@ const ui = {
   menuGuideBtn: document.getElementById('menu-guide-btn'),
   closeGuideBtn: document.getElementById('close-guide-btn'),
 
-  // Generic & Social Modals
+  // Starr Drop Modal
+  starrDropModal: document.getElementById('starr-drop-modal'),
+  starrDropOrb: document.getElementById('starr-drop-orb'),
+  starrDropStatus: document.getElementById('starr-drop-status'),
+
+  // Gacha Result Modal
+  gachaResultModal: document.getElementById('gacha-result-modal'),
+  gachaImg: document.getElementById('gacha-img'),
+  gachaItemName: document.getElementById('gacha-item-name'),
+  gachaItemStat: document.getElementById('gacha-item-stat'),
+  closeGachaBtn: document.getElementById('close-gacha-btn'),
+
+  // Pause Modal
+  pauseModal: document.getElementById('pause-modal'),
+  btnPauseGame: document.getElementById('btn-pause-game'),
+  btnResumeGame: document.getElementById('btn-resume-game'),
+  btnQuitGame: document.getElementById('btn-quit-game'),
+
+  // Multiplayer Select Modal
+  multiSelectModal: document.getElementById('multiplayer-select-modal'),
+  btnOpenMultiSelect: document.getElementById('btn-open-multi-select'),
+  closeMultiSelectBtn: document.getElementById('close-multi-select-btn'),
+  btnStartRanked: document.getElementById('btn-start-ranked'),
+  btnNormalAuto: document.getElementById('btn-normal-auto'),
+  btnNormalCode: document.getElementById('btn-normal-code'),
+  input4DigitCode: document.getElementById('4digit-code-input'),
+
+  // Friends & Generic Modals
   friendsModal: document.getElementById('friends-modal'),
   btnFriendsModal: document.getElementById('btn-friends-modal'),
   closeFriendsBtn: document.getElementById('close-friends-btn'),
@@ -298,6 +391,13 @@ const ui = {
   genModalBody: document.getElementById('gen-modal-body'),
   genModalClaim: document.getElementById('gen-modal-claim'),
   closeGenericBtn: document.getElementById('close-generic-btn'),
+
+  // 1v1 PvP HUD & 40s Build Banner
+  pvpHpContainer: document.getElementById('pvp-hp-container'),
+  p1HpVal: document.getElementById('p1-hp-val'),
+  p2HpVal: document.getElementById('p2-hp-val'),
+  pvpBuildTimerBox: document.getElementById('pvp-build-timer-box'),
+  buildTimerVal: document.getElementById('build-timer-val'),
 
   stageVal: document.getElementById('stage-val'),
   targetCounter: document.getElementById('target-counter'),
@@ -360,187 +460,263 @@ if (typeof authManager !== 'undefined') {
   ui.logoutBtn.addEventListener('click', () => authManager.logout());
 }
 
-// --- Interactive Modals Binding ---
-function openGenericModal(title, htmlContent, onClaim) {
-  ui.genModalTitle.textContent = title;
-  ui.genModalBody.innerHTML = htmlContent;
-  ui.genericModal.classList.remove('hidden');
+// --- INTERACTIVE TABS ---
+const mainTabs = ['tab-shop', 'tab-equip', 'tab-battle', 'tab-lab'];
+const mainViews = ['view-shop-tab', 'view-equip-tab', 'view-battle-tab', 'view-lab-tab'];
 
-  ui.genModalClaim.onclick = () => {
-    if (onClaim) onClaim();
-    sounds.playGem();
-    ui.genericModal.classList.add('hidden');
-  };
-}
-
-ui.closeGenericBtn.addEventListener('click', () => ui.genericModal.classList.add('hidden'));
-
-// Ribbon Buttons Handlers
-document.getElementById('btn-gift').onclick = () => {
-  openGenericModal("🎁 매일 출석 선물 보상", "<p>오늘의 출석 보상을 수령하세요!</p><p>🪙 <strong>+1,000 골드</strong> | 💎 <strong>+50 보석</strong></p>", () => {
-    userGold += 1000;
-    userGem += 50;
-    saveCurrencies();
-  });
-};
-
-document.getElementById('btn-pass').onclick = () => {
-  openGenericModal("🎫 시즌 패스 보상", "<p>시즌 패스 1단계 목표 달성 완료!</p><p>🪙 <strong>+2,500 골드</strong></p>", () => {
-    userGold += 2500;
-    saveCurrencies();
-  });
-};
-
-document.getElementById('btn-growth').onclick = () => {
-  openGenericModal("📈 성장 펀드", "<p>레벨 업 보상 달성!</p><p>💎 <strong>+100 보석</strong></p>", () => {
-    userGem += 100;
-    saveCurrencies();
-  });
-};
-
-document.getElementById('btn-piggy').onclick = () => {
-  openGenericModal("🐷 황금 저금통", "<p>저금통에 저축된 골드를 모두 인출합니다!</p><p>🪙 <strong>+5,000 골드</strong></p>", () => {
-    userGold += 5000;
-    saveCurrencies();
-  });
-};
-
-document.getElementById('btn-echo').onclick = () => {
-  openGenericModal("🌰 에코 이벤트 상점", "<p>도토리 이벤트 특별 보상을 수령하세요!</p><p>💎 <strong>+80 보석</strong></p>", () => {
-    userGem += 80;
-    saveCurrencies();
-  });
-};
-
-document.getElementById('btn-quiz').onclick = () => {
-  openGenericModal("📝 일일 퀴즈", `
-    <p>Q. 주인공 화살표의 궁극기 스킬 명칭은?</p>
-    <div style="margin-top:10px;">
-      <button class="ftab" onclick="alert('정답입니다! +50보석 획득!')">1. DIMENSION OVERDRIVE</button>
-      <button class="ftab" onclick="alert('오답입니다!')">2. SUPER BLAST</button>
-    </div>
-  `, () => {
-    userGem += 50;
-    saveCurrencies();
-  });
-};
-
-document.getElementById('btn-achievements').onclick = () => {
-  openGenericModal("📋 업적 목록", "<p>✔️ 몬스터 100마리 처치 달성!</p><p>🪙 <strong>+3,000 골드</strong></p>", () => {
-    userGold += 3000;
-    saveCurrencies();
-  });
-};
-
-document.getElementById('btn-chapter-chest').onclick = () => {
-  openGenericModal("🧰 챕터 보물상자", "<p>보물상자에서 희귀 아이템 획득!</p><p>🪙 <strong>+1,500 골드</strong> | 💎 <strong>+30 보석</strong></p>", () => {
-    userGold += 1500;
-    userGem += 30;
-    saveCurrencies();
-  });
-};
-
-document.getElementById('btn-patrol').onclick = () => {
-  openGenericModal("🕒 빠른 순찰 (AFK 보상)", "<p>오프라인 순찰 보상이 쌓였습니다!</p><p>🪙 <strong>+4,200 골드</strong></p>", () => {
-    userGold += 4200;
-    saveCurrencies();
-  });
-};
-
-document.getElementById('btn-daily-challenge').onclick = startGame;
-document.getElementById('btn-daily-event').onclick = startGame;
-
-// Friends Modal Handlers
-ui.btnFriendsModal.onclick = () => ui.friendsModal.classList.remove('hidden');
-ui.closeFriendsBtn.onclick = () => ui.friendsModal.classList.add('hidden');
-
-// Friends Sub-tabs
-const ftabs = ['ftab-list', 'ftab-add', 'ftab-chat', 'ftab-pvp'];
-const fviews = ['fview-list', 'fview-add', 'fview-chat', 'fview-pvp'];
-
-ftabs.forEach((tabId, idx) => {
+mainTabs.forEach((tabId, idx) => {
   document.getElementById(tabId).onclick = () => {
-    ftabs.forEach(t => document.getElementById(t).classList.remove('active'));
-    fviews.forEach(v => document.getElementById(v).classList.add('hidden'));
+    mainTabs.forEach(t => document.getElementById(t).classList.remove('active-battle-tab'));
+    mainViews.forEach(v => document.getElementById(v).classList.add('hidden'));
 
-    document.getElementById(tabId).classList.add('active');
-    document.getElementById(fviews[idx]).classList.remove('hidden');
+    document.getElementById(tabId).classList.add('active-battle-tab');
+    document.getElementById(mainViews[idx]).classList.remove('hidden');
   };
 });
 
-// Direct Chat Sending
-document.getElementById('btn-send-chat').onclick = () => {
-  const input = document.getElementById('chat-input');
-  if (input.value.trim() !== '') {
-    if (socket) {
-      socket.emit('send_message', {
-        senderId: 'me',
-        senderName: ui.userName.textContent,
-        text: input.value
-      });
+document.getElementById('btn-shop-ribbon').onclick = () => document.getElementById('tab-shop').click();
+
+// --- BRAWL STARS STARR DROP GACHA UNBOXING LOGIC ---
+let activeStarrDropItem = null;
+let currentTapCount = 0;
+let targetTapsNeeded = 1;
+
+document.getElementById('btn-open-diamond').onclick = () => startStarrDropGacha('DIAMOND', 100);
+document.getElementById('btn-open-sedan').onclick = () => startStarrDropGacha('SEDAN', 300);
+document.getElementById('btn-open-crosis').onclick = () => startStarrDropGacha('CROSIS', 500);
+
+function startStarrDropGacha(chestType, cost) {
+  if (userGem < cost) {
+    alert("보석이 부족합니다!");
+    return;
+  }
+  userGem -= cost;
+  saveCurrencies();
+
+  let rank = 'C';
+  const rand = Math.random() * 100;
+
+  if (chestType === 'DIAMOND') {
+    if (rand < 60) rank = 'C';
+    else if (rand < 92) rank = 'B';
+    else rank = 'A';
+  } else if (chestType === 'SEDAN') {
+    if (rand < 45) rank = 'B';
+    else if (rand < 85) rank = 'A';
+    else rank = 'S';
+  } else if (chestType === 'CROSIS') {
+    if (rand < 55) rank = 'A';
+    else rank = 'S';
+  }
+
+  const slotKeys = Object.keys(SlotTypes);
+  const slotKey = slotKeys[Math.floor(Math.random() * slotKeys.length)];
+  const slotInfo = SlotTypes[slotKey];
+  const rankInfo = RankStats[rank];
+
+  activeStarrDropItem = {
+    id: Date.now(),
+    slotType: slotKey,
+    rank: rank,
+    name: `${rankInfo.label} ${slotInfo.name}`,
+    icon: slotInfo.icon,
+    def: rankInfo.def,
+    hp: rankInfo.hp,
+    colorClass: rankInfo.colorClass
+  };
+
+  currentTapCount = 0;
+  targetTapsNeeded = rankInfo.maxTaps;
+
+  // Reset Starr Drop Modal UI
+  ui.starrDropOrb.className = 'starr-drop-orb-box rare';
+  ui.starrDropStatus.textContent = '✨ TAP TO UPGRADE! ✨';
+  ui.starrDropModal.classList.remove('hidden');
+
+  sounds.playGem();
+}
+
+// Tap Handler for Starr Drop Upgrade
+ui.starrDropOrb.onclick = () => {
+  if (!activeStarrDropItem) return;
+  currentTapCount++;
+
+  sounds.playLevelUp();
+  triggerScreenShake(8 + currentTapCount * 6, 12);
+
+  if (currentTapCount === 1) {
+    ui.starrDropOrb.className = 'starr-drop-orb-box rare';
+    ui.starrDropStatus.textContent = '🔵 RARE!';
+  } else if (currentTapCount === 2) {
+    ui.starrDropOrb.className = 'starr-drop-orb-box epic';
+    ui.starrDropStatus.textContent = '🟣 EPIC!';
+  } else if (currentTapCount === 3) {
+    ui.starrDropOrb.className = 'starr-drop-orb-box mythic';
+    ui.starrDropStatus.textContent = '💖 MYTHIC!';
+  } else if (currentTapCount >= 4) {
+    ui.starrDropOrb.className = 'starr-drop-orb-box legendary';
+    ui.starrDropStatus.textContent = '👑 LEGENDARY S-RANK!';
+  }
+
+  if (currentTapCount >= targetTapsNeeded) {
+    setTimeout(() => {
+      ui.starrDropModal.classList.add('hidden');
+
+      inventory.push(activeStarrDropItem);
+      localStorage.setItem('get_nav_inventory', JSON.stringify(inventory));
+
+      ui.gachaImg.src = activeStarrDropItem.icon;
+      ui.gachaItemName.textContent = activeStarrDropItem.name;
+      ui.gachaItemName.className = activeStarrDropItem.colorClass;
+      ui.gachaItemStat.textContent = `🛡️ 방어력 +${activeStarrDropItem.def} | ❤️ 추가 체력 +${activeStarrDropItem.hp}`;
+      ui.gachaResultModal.classList.remove('hidden');
+
+      renderInventory();
+      activeStarrDropItem = null;
+    }, 450);
+  }
+};
+
+ui.closeGachaBtn.onclick = () => ui.gachaResultModal.classList.add('hidden');
+
+// --- RENDER INVENTORY ---
+function renderInventory() {
+  const container = document.getElementById('inventory-grid-box');
+  if (!container) return;
+  container.innerHTML = '';
+
+  let totalDef = 0;
+  let totalHp = 0;
+
+  Object.keys(equippedGear).forEach(slotKey => {
+    const gear = equippedGear[slotKey];
+    const displayEl = document.getElementById(`${slotKey.toLowerCase()}-name-display`);
+    if (gear) {
+      totalDef += gear.def;
+      totalHp += gear.hp;
+      if (displayEl) {
+        displayEl.textContent = gear.name;
+        displayEl.className = gear.colorClass;
+      }
+    } else if (displayEl) {
+      displayEl.textContent = `미착용 (D등급)`;
+      displayEl.className = 'rank-d';
     }
-    input.value = '';
-  }
-};
+  });
 
-// 1v1 PvP Friendly Room Creation
-document.getElementById('btn-create-pvp').onclick = () => {
-  const code = 'PVP-' + Math.floor(1000 + Math.random() * 9000);
-  document.getElementById('pvp-room-code').textContent = code;
-  alert(`1v1 친선전 방이 생성되었습니다! 방 코드: ${code}\n상대방 입장 시 자동 전투 시작!`);
-  if (socket) {
-    socket.emit('join_pvp_room', { roomCode: code, nickname: ui.userName.textContent });
-  }
-};
+  document.getElementById('equip-def-val').textContent = totalDef;
+  document.getElementById('equip-hp-val').textContent = `+${totalHp}`;
 
-function saveCurrencies() {
-  localStorage.setItem('get_nav_gold', userGold);
-  localStorage.setItem('get_nav_gem', userGem);
-  updateHomeHubUI();
+  inventory.forEach(item => {
+    const card = document.createElement('div');
+    card.className = 'inventory-item-card';
+    card.innerHTML = `
+      <img src="${item.icon}" class="inv-img" alt="${item.name}">
+      <span class="inv-name ${item.colorClass}">${item.rank}급 ${SlotTypes[item.slotType].name}</span>
+    `;
+    card.onclick = () => {
+      equippedGear[item.slotType] = item;
+      localStorage.setItem('get_nav_equipped', JSON.stringify(equippedGear));
+      alert(`🛡️ [${item.name}] 장비를 착용했습니다!`);
+      renderInventory();
+    };
+    container.appendChild(card);
+  });
 }
+renderInventory();
 
-ui.menuStartBtn.addEventListener('click', startGame);
-ui.menuGuideBtn.addEventListener('click', () => ui.guideModal.classList.remove('hidden'));
-ui.closeGuideBtn.addEventListener('click', () => ui.guideModal.classList.add('hidden'));
-ui.restartBtn.addEventListener('click', startGame);
-ui.toMenuBtn.addEventListener('click', showMainMenu);
-ui.victoryHomeBtn.addEventListener('click', showMainMenu);
-ui.nextStageBtn.addEventListener('click', () => {
-  currentStage++;
-  localStorage.setItem('get_nav_current_stage', currentStage);
-  startGame();
+// TECH LAB UPGRADES
+document.getElementById('btn-tech-atk').onclick = () => {
+  if (userGold >= 1500) {
+    userGold -= 1500;
+    bonusAtk += 10;
+    localStorage.setItem('get_nav_bonus_atk', bonusAtk);
+    alert("🧪 영구 공격력 +10 연구 완료!");
+    saveCurrencies();
+  } else alert("골드가 부족합니다!");
+};
+
+document.getElementById('btn-tech-hp').onclick = () => {
+  if (userGold >= 1500) {
+    userGold -= 1500;
+    bonusHp += 50;
+    localStorage.setItem('get_nav_bonus_hp', bonusHp);
+    alert("🧪 영구 최대 체력 +50 연구 완료!");
+    saveCurrencies();
+  } else alert("골드가 부족합니다!");
+};
+
+document.getElementById('btn-tech-speed').onclick = () => {
+  if (userGold >= 2000) {
+    userGold -= 2000;
+    player.speed += 0.5;
+    alert("🧪 영구 이동 속도 +10% 연구 완료!");
+    saveCurrencies();
+  } else alert("골드가 부족합니다!");
+};
+
+// Pause Handlers
+ui.btnPauseGame.addEventListener('click', togglePauseGame);
+ui.btnResumeGame.addEventListener('click', () => {
+  ui.pauseModal.classList.add('hidden');
+  currentState = GameState.PLAYING;
 });
-ui.ultBtn.addEventListener('click', activateUltimate);
+ui.btnQuitGame.addEventListener('click', () => {
+  ui.pauseModal.classList.add('hidden');
+  showMainMenu();
+});
 
-function updateHomeHubUI() {
-  stageTargetKills = 10 + (currentStage - 1) * 5;
-  ui.hubStageName.textContent = `${currentStage}. 초원 버그 대습격`;
-  ui.hubStageTarget.textContent = `${stageTargetKills}마리 처치`;
-
-  bestTime = localStorage.getItem('get_nav_best_time') || 0;
-  ui.bestScoreTime.textContent = `${bestTime}초`;
-  ui.headerUserLevel.textContent = player.level;
-
-  ui.userGold.textContent = userGold.toLocaleString();
-  ui.userGem.textContent = userGem.toLocaleString();
-}
-updateHomeHubUI();
-
-function showMainMenu() {
-  currentState = GameState.MAIN_MENU;
-  ui.mainMenu.classList.remove('hidden');
-  ui.hud.classList.add('hidden');
-  ui.gameoverModal.classList.add('hidden');
-  ui.skillModal.classList.add('hidden');
-  ui.stageClearModal.classList.add('hidden');
-  updateHomeHubUI();
+function togglePauseGame() {
+  if (currentMatchMode !== 'PVE') return;
+  if (currentState === GameState.PLAYING) {
+    currentState = GameState.PAUSED;
+    ui.pauseModal.classList.remove('hidden');
+  } else if (currentState === GameState.PAUSED) {
+    currentState = GameState.PLAYING;
+    ui.pauseModal.classList.add('hidden');
+  }
 }
 
-function startGame() {
+// Multiplayer Select Modal Handlers
+ui.btnOpenMultiSelect.addEventListener('click', () => ui.multiSelectModal.classList.remove('hidden'));
+ui.closeMultiSelectBtn.addEventListener('click', () => ui.multiSelectModal.classList.add('hidden'));
+
+// 1v1 Ranked & Normal Matches
+ui.btnStartRanked.addEventListener('click', () => {
+  ui.multiSelectModal.classList.add('hidden');
+  currentMatchMode = 'PVP_RANKED';
+  start1v1PvPGame(`🏆 1v1 랭크전 (${placementsCompleted < 3 ? `배치고사 ${placementsCompleted + 1}/3` : 'MMR 1v1'})`);
+});
+
+ui.btnNormalAuto.addEventListener('click', () => {
+  ui.multiSelectModal.classList.add('hidden');
+  currentMatchMode = 'PVP_NORMAL';
+  start1v1PvPGame("🎮 1v1 일반전");
+});
+
+ui.btnNormalCode.addEventListener('click', () => {
+  const code = ui.input4DigitCode.value.trim();
+  if (code.length !== 4 || isNaN(code)) {
+    alert("올바른 4자리 코드를 입력하세요!");
+    return;
+  }
+  ui.multiSelectModal.classList.add('hidden');
+  currentMatchMode = 'PVP_NORMAL';
+  start1v1PvPGame(`🎮 1v1 코드: ${code}`);
+});
+
+function start1v1PvPGame(title) {
   sounds.init();
   currentState = GameState.PLAYING;
 
-  stageTargetKills = 10 + (currentStage - 1) * 5;
+  ui.btnPauseGame.classList.add('hidden');
+  ui.pvpHpContainer.classList.remove('hidden');
+  ui.pvpBuildTimerBox.classList.remove('hidden');
+
+  pvpBuildTimer = 40;
+  isPvpNarrowArenaActive = false;
+
+  stageTargetKills = 1;
   stageKills = 0;
 
   ui.mainMenu.classList.add('hidden');
@@ -548,12 +724,25 @@ function startGame() {
   ui.gameoverModal.classList.add('hidden');
   ui.skillModal.classList.add('hidden');
   ui.stageClearModal.classList.add('hidden');
-  ui.guideModal.classList.add('hidden');
+
+  resetPlayerState();
+  createOpponentPlayer();
+  updateHUD();
+
+  // Give immediate Skill Upgrades during Build Phase!
+  showSkillModal();
+}
+
+function resetPlayerState() {
+  let gearHp = 0;
+  Object.keys(equippedGear).forEach(k => {
+    if (equippedGear[k]) gearHp += equippedGear[k].hp;
+  });
 
   player.x = 0;
   player.y = 0;
-  player.hp = 100;
-  player.maxHp = 100;
+  player.hp = 100 + bonusHp + gearHp;
+  player.maxHp = 100 + bonusHp + gearHp;
   player.level = 1;
   player.xp = 0;
   player.nextXp = 10;
@@ -579,8 +768,169 @@ function startGame() {
   boss = null;
   bossSpawned = false;
   gameTime = 0;
-
   ui.bossHpContainer.classList.add('hidden');
+}
+
+// Generic Modal Helper
+function openGenericModal(title, htmlContent, onClaim) {
+  ui.genModalTitle.textContent = title;
+  ui.genModalBody.innerHTML = htmlContent;
+  ui.genericModal.classList.remove('hidden');
+
+  ui.genModalClaim.onclick = () => {
+    if (onClaim) onClaim();
+    sounds.playGem();
+    ui.genericModal.classList.add('hidden');
+  };
+}
+
+ui.closeGenericBtn.addEventListener('click', () => ui.genericModal.classList.add('hidden'));
+
+// Ribbon Handlers
+document.getElementById('btn-gift').onclick = () => {
+  openGenericModal("🎁 매일 출석 선물 보상", "<p>오늘의 출석 보상을 수령하세요!</p><p>🪙 <strong>+1,000 골드</strong> | 💎 <strong>+50 보석</strong></p>", () => {
+    userGold += 1000;
+    userGem += 50;
+    saveCurrencies();
+  });
+};
+
+document.getElementById('btn-pass').onclick = () => {
+  openGenericModal("🎫 시즌 패스 보상", "<p>시즌 패스 1단계 목표 달성 완료!</p><p>🪙 <strong>+2,500 골드</strong></p>", () => {
+    userGold += 2500;
+    saveCurrencies();
+  });
+};
+
+document.getElementById('btn-achievements').onclick = () => {
+  openGenericModal("📋 업적 목록", "<p>✔️ 몬스터 100마리 처치 달성!</p><p>🪙 <strong>+3,000 골드</strong></p>", () => {
+    userGold += 3000;
+    saveCurrencies();
+  });
+};
+
+document.getElementById('btn-daily-challenge').onclick = startGame;
+document.getElementById('btn-daily-event').onclick = startGame;
+
+// Friends Modal Handlers
+ui.btnFriendsModal.onclick = () => ui.friendsModal.classList.remove('hidden');
+ui.closeFriendsBtn.onclick = () => ui.friendsModal.classList.add('hidden');
+
+const ftabs = ['ftab-list', 'ftab-add', 'ftab-chat', 'ftab-pvp'];
+const fviews = ['fview-list', 'fview-add', 'fview-chat', 'fview-pvp'];
+
+ftabs.forEach((tabId, idx) => {
+  document.getElementById(tabId).onclick = () => {
+    ftabs.forEach(t => document.getElementById(t).classList.remove('active'));
+    fviews.forEach(v => document.getElementById(v).classList.add('hidden'));
+
+    document.getElementById(tabId).classList.add('active');
+    document.getElementById(fviews[idx]).classList.remove('hidden');
+  };
+});
+
+document.getElementById('btn-send-chat').onclick = () => {
+  const input = document.getElementById('chat-input');
+  if (input.value.trim() !== '') {
+    if (socket) {
+      socket.emit('send_message', {
+        senderId: 'me',
+        senderName: ui.userName.textContent,
+        text: input.value
+      });
+    }
+    input.value = '';
+  }
+};
+
+document.getElementById('btn-create-pvp').onclick = () => {
+  const code = Math.floor(1000 + Math.random() * 9000);
+  document.getElementById('pvp-room-code').textContent = code;
+  ui.friendsModal.classList.add('hidden');
+  currentMatchMode = 'PVP_NORMAL';
+  start1v1PvPGame(`⚔️ 1v1 친선전 (방 코드: ${code})`);
+};
+
+function saveCurrencies() {
+  localStorage.setItem('get_nav_gold', userGold);
+  localStorage.setItem('get_nav_gem', userGem);
+  updateHomeHubUI();
+}
+
+ui.menuStartBtn.addEventListener('click', startGame);
+ui.menuGuideBtn.addEventListener('click', () => ui.guideModal.classList.remove('hidden'));
+ui.closeGuideBtn.addEventListener('click', () => ui.guideModal.classList.add('hidden'));
+ui.restartBtn.addEventListener('click', startGame);
+ui.toMenuBtn.addEventListener('click', showMainMenu);
+ui.victoryHomeBtn.addEventListener('click', showMainMenu);
+ui.nextStageBtn.addEventListener('click', () => {
+  if (currentMatchMode === 'PVE') {
+    currentStage++;
+    localStorage.setItem('get_nav_current_stage', currentStage);
+    startGame();
+  } else {
+    start1v1PvPGame("⚔️ 1v1 재대결");
+  }
+});
+ui.ultBtn.addEventListener('click', activateUltimate);
+
+function updateHomeHubUI() {
+  stageTargetKills = 10 + (currentStage - 1) * 5;
+  ui.hubStageName.textContent = `${currentStage}. 초원 버그 대습격`;
+  ui.hubStageTarget.textContent = `${stageTargetKills}마리 처치`;
+
+  bestTime = localStorage.getItem('get_nav_best_time') || 0;
+  ui.bestScoreTime.textContent = `${bestTime}초`;
+  ui.headerUserLevel.textContent = player.level;
+
+  ui.userGold.textContent = userGold.toLocaleString();
+  ui.userGem.textContent = userGem.toLocaleString();
+
+  const tierInfo = getCurrentTierInfo();
+  ui.userTierBadgeImg.src = tierInfo.badge;
+  ui.userTierName.textContent = tierInfo.name;
+  ui.userTierPlacement.textContent = tierInfo.placementText;
+
+  ui.modalTierBadge.src = tierInfo.badge;
+  ui.modalTierName.textContent = tierInfo.name;
+  ui.modalPlacementText.textContent = tierInfo.placementText;
+}
+updateHomeHubUI();
+
+function showMainMenu() {
+  currentState = GameState.MAIN_MENU;
+  ui.mainMenu.classList.remove('hidden');
+  ui.hud.classList.add('hidden');
+  ui.gameoverModal.classList.add('hidden');
+  ui.skillModal.classList.add('hidden');
+  ui.stageClearModal.classList.add('hidden');
+  ui.pauseModal.classList.add('hidden');
+  ui.pvpHpContainer.classList.add('hidden');
+  ui.pvpBuildTimerBox.classList.add('hidden');
+  updateHomeHubUI();
+}
+
+function startGame() {
+  sounds.init();
+  currentState = GameState.PLAYING;
+  currentMatchMode = 'PVE';
+  opponentPlayer = null;
+
+  ui.btnPauseGame.classList.remove('hidden');
+  ui.pvpHpContainer.classList.add('hidden');
+  ui.pvpBuildTimerBox.classList.add('hidden');
+
+  stageTargetKills = 10 + (currentStage - 1) * 5;
+  stageKills = 0;
+
+  ui.mainMenu.classList.add('hidden');
+  ui.hud.classList.remove('hidden');
+  ui.gameoverModal.classList.add('hidden');
+  ui.skillModal.classList.add('hidden');
+  ui.stageClearModal.classList.add('hidden');
+  ui.guideModal.classList.add('hidden');
+
+  resetPlayerState();
   updateHUD();
 }
 
@@ -589,22 +939,33 @@ function checkStageClear() {
     currentState = GameState.STAGE_CLEAR;
     sounds.playLevelUp();
 
-    ui.clearStageName.textContent = `STAGE ${currentStage} 클리어 성공!`;
+    ui.clearStageName.textContent = currentMatchMode.startsWith('PVP') ? `1v1 대결 승리!` : `STAGE ${currentStage} 클리어 성공!`;
     ui.stageClearModal.classList.remove('hidden');
 
-    userGold += 200;
-    userGem += 15;
-    saveCurrencies();
+    userGold += 250;
+    userGem += 20;
 
-    if (player.kills > bestKills || gameTime > bestTime) {
-      bestKills = Math.max(bestKills, player.kills);
-      bestTime = Math.max(bestTime, gameTime);
-      localStorage.setItem('get_nav_best_kills', bestKills);
-      localStorage.setItem('get_nav_best_time', bestTime);
-      if (typeof authManager !== 'undefined') {
-        authManager.saveScore(bestKills, bestTime);
+    if (currentMatchMode === 'PVP_RANKED') {
+      if (placementsCompleted < 3) {
+        placementsCompleted++;
+        placementWins++;
+        localStorage.setItem('get_nav_placements_completed', placementsCompleted);
+        localStorage.setItem('get_nav_placements_wins', placementWins);
+
+        if (placementsCompleted === 3) {
+          userMMR = 1000 + placementWins * 500;
+          localStorage.setItem('get_nav_mmr', userMMR);
+          alert(`🏆 3회 배치고사 완료! 당신의 MMR은 [ ${userMMR} ] 이며, 최종 티어가 부여되었습니다!`);
+        } else {
+          alert(`🏆 배치고사 ${placementsCompleted}/3 완료! (승리!)`);
+        }
+      } else {
+        userMMR += 50;
+        localStorage.setItem('get_nav_mmr', userMMR);
       }
     }
+
+    saveCurrencies();
   }
 }
 
@@ -747,6 +1108,14 @@ function getNearestTarget(fromX, fromY) {
   let nearest = null;
   let minDist = Infinity;
 
+  if (opponentPlayer && opponentPlayer.hp > 0) {
+    const d = Math.hypot(opponentPlayer.x - fromX, opponentPlayer.y - fromY);
+    if (d < minDist) {
+      minDist = d;
+      nearest = opponentPlayer;
+    }
+  }
+
   if (boss) {
     const d = Math.hypot(boss.x - fromX, boss.y - fromY);
     if (d < minDist) {
@@ -794,7 +1163,7 @@ function updateWeapons() {
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
         radius: 6,
-        damage: 25 + player.skills.multiArrow * 6,
+        damage: (25 + player.skills.multiArrow * 6) + bonusAtk,
         color: '#00f0ff',
         life: 90,
         pierce: 1,
@@ -802,93 +1171,55 @@ function updateWeapons() {
       });
     }
   }
-
-  if (player.skills.laserBeam > 0) {
-    player.laserTimer++;
-    if (player.laserTimer >= 85 - player.skills.laserBeam * 10) {
-      player.laserTimer = 0;
-      sounds.playLaser();
-
-      const target = getNearestTarget(player.x, player.y);
-      let laserAngle = player.angle;
-      if (target) {
-        laserAngle = Math.atan2(target.y - player.y, target.x - player.x);
-      }
-
-      bullets.push({
-        x: player.x,
-        y: player.y,
-        vx: Math.cos(laserAngle) * 18,
-        vy: Math.sin(laserAngle) * 18,
-        radius: 14,
-        damage: 75 + player.skills.laserBeam * 22,
-        color: '#ff0077',
-        isLaser: true,
-        target: target,
-        life: 80,
-        pierce: 99
-      });
-    }
-  }
-
-  if (player.skills.homingMissile > 0) {
-    player.missileTimer++;
-    if (player.missileTimer >= 100 - player.skills.homingMissile * 12) {
-      player.missileTimer = 0;
-      bullets.push({
-        x: player.x,
-        y: player.y,
-        vx: (Math.random() - 0.5) * 4,
-        vy: (Math.random() - 0.5) * 4,
-        radius: 9,
-        damage: 100 + player.skills.homingMissile * 35,
-        color: '#ffd700',
-        isMissile: true,
-        life: 180,
-        pierce: 1
-      });
-    }
-  }
-
-  if (player.skills.airStrike > 0) {
-    player.strikeTimer++;
-    if (player.strikeTimer >= 150) {
-      player.strikeTimer = 0;
-      triggerScreenShake(14, 22);
-      sounds.playExplosion(true);
-
-      const target = getNearestTarget(player.x, player.y);
-      const cx = target ? target.x : player.x;
-      const cy = target ? target.y : player.y;
-
-      for (let i = -3; i <= 3; i++) {
-        particles.push({
-          x: cx + i * 90,
-          y: cy,
-          radius: 45,
-          color: '#ff3300',
-          life: 30,
-          isExplosion: true,
-          damage: 160
-        });
-        particles.push({
-          x: cx,
-          y: cy + i * 90,
-          radius: 45,
-          color: '#ff3300',
-          life: 30,
-          isExplosion: true,
-          damage: 160
-        });
-      }
-    }
-  }
 }
 
+// Engine Update Loop
 function update() {
   if (currentState !== GameState.PLAYING) return;
 
   gameTime += 1 / 60;
+
+  // 1v1 PvP 40-Second Build Timer Countdown & Teleport to Narrow Ring Arena
+  if (currentMatchMode.startsWith('PVP')) {
+    if (pvpBuildTimer > 0) {
+      pvpBuildTimer -= 1 / 60;
+      ui.buildTimerVal.textContent = `${Math.ceil(pvpBuildTimer)}s`;
+
+      if (pvpBuildTimer <= 0) {
+        pvpBuildTimer = 0;
+        isPvpNarrowArenaActive = true;
+        ui.pvpBuildTimerBox.classList.add('hidden');
+
+        sounds.playBossRoar();
+        triggerScreenShake(25, 40);
+
+        // Teleport both players into 300px Narrow Arena Ring
+        player.x = -120;
+        player.y = 0;
+        if (opponentPlayer) {
+          opponentPlayer.x = 120;
+          opponentPlayer.y = 0;
+        }
+      }
+    }
+
+    // Constrain players inside Narrow Arena Ring
+    if (isPvpNarrowArenaActive) {
+      const arenaRadius = 320;
+      const distP1 = Math.hypot(player.x, player.y);
+      if (distP1 > arenaRadius) {
+        player.x = (player.x / distP1) * arenaRadius;
+        player.y = (player.y / distP1) * arenaRadius;
+      }
+      if (opponentPlayer) {
+        const distP2 = Math.hypot(opponentPlayer.x, opponentPlayer.y);
+        if (distP2 > arenaRadius) {
+          opponentPlayer.x = (opponentPlayer.x / distP2) * arenaRadius;
+          opponentPlayer.y = (opponentPlayer.y / distP2) * arenaRadius;
+        }
+      }
+    }
+  }
 
   let moveX = 0;
   let moveY = 0;
@@ -922,18 +1253,45 @@ function update() {
 
   updateWeapons();
 
+  // 1v1 Opponent Player AI Logic
+  if (opponentPlayer && opponentPlayer.hp > 0) {
+    const oppAngle = Math.atan2(player.y - opponentPlayer.y, player.x - opponentPlayer.x);
+    opponentPlayer.x += Math.cos(oppAngle) * (opponentPlayer.speed * 0.6);
+    opponentPlayer.y += Math.sin(oppAngle) * (opponentPlayer.speed * 0.6);
+    opponentPlayer.angle = oppAngle;
+
+    opponentPlayer.shootTimer++;
+    if (opponentPlayer.shootTimer >= 40) {
+      opponentPlayer.shootTimer = 0;
+      enemyBullets.push({
+        x: opponentPlayer.x,
+        y: opponentPlayer.y,
+        vx: Math.cos(oppAngle) * 9,
+        vy: Math.sin(oppAngle) * 9,
+        radius: 7,
+        damage: 12
+      });
+    }
+  }
+
   mobSpawnTimer++;
   const spawnRate = Math.max(8, 45 - Math.floor(gameTime / 8));
-  if (mobSpawnTimer >= spawnRate) {
+  if (mobSpawnTimer >= spawnRate && !isPvpNarrowArenaActive) {
     mobSpawnTimer = 0;
     spawnMob();
   }
 
-  if (gameTime >= 60 && !bossSpawned) {
+  if (gameTime >= 60 && !bossSpawned && currentMatchMode === 'PVE') {
     spawnBoss();
   }
 
   const speedMultiplier = 1 + Math.min(2.5, gameTime * 0.035);
+
+  let gearDef = 0;
+  Object.keys(equippedGear).forEach(k => {
+    if (equippedGear[k]) gearDef += equippedGear[k].def;
+  });
+  const dmgReduction = Math.min(0.8, gearDef * 0.002);
 
   for (let i = mobs.length - 1; i >= 0; i--) {
     const mob = mobs[i];
@@ -943,11 +1301,10 @@ function update() {
     mob.x += Math.cos(angle) * mob.speed;
     mob.y += Math.sin(angle) * mob.speed;
 
-    if (mob.hitFlash > 0) mob.hitFlash--;
-
     const dist = Math.hypot(player.x - mob.x, player.y - mob.y);
     if (dist < player.radius + mob.radius) {
-      player.hp -= mob.damage;
+      const netDamage = Math.max(1, mob.damage * (1 - dmgReduction));
+      player.hp -= netDamage;
       sounds.playHit();
       ui.screenFlash.className = 'flash-hit';
       setTimeout(() => ui.screenFlash.className = '', 150);
@@ -959,68 +1316,8 @@ function update() {
     }
   }
 
-  if (player.skills.orbitShield > 0) {
-    const shieldCount = player.skills.orbitShield;
-    const shieldOrbitRadius = 110;
-
-    for (let i = 0; i < shieldCount; i++) {
-      const shieldAngle = gameTime * 3 + (i / shieldCount) * Math.PI * 2;
-      const sx = player.x + Math.cos(shieldAngle) * shieldOrbitRadius;
-      const sy = player.y + Math.sin(shieldAngle) * shieldOrbitRadius;
-
-      mobs.forEach(mob => {
-        if (Math.hypot(sx - mob.x, sy - mob.y) < 30 + mob.radius) {
-          mob.hp -= 5;
-          mob.hitFlash = 3;
-        }
-      });
-
-      if (boss && Math.hypot(sx - boss.x, sy - boss.y) < 30 + boss.radius) {
-        boss.hp -= 5;
-        boss.hitFlash = 3;
-      }
-    }
-  }
-
-  if (boss) {
-    const angle = Math.atan2(player.y - boss.y, player.x - boss.x);
-    boss.x += Math.cos(angle) * (boss.speed * speedMultiplier * 0.8);
-    boss.y += Math.sin(angle) * (boss.speed * speedMultiplier * 0.8);
-
-    if (boss.hitFlash > 0) boss.hitFlash--;
-
-    boss.attackTimer++;
-    if (boss.attackTimer >= 80) {
-      boss.attackTimer = 0;
-      for (let b = 0; b < 18; b++) {
-        const bulletAngle = (b / 18) * Math.PI * 2;
-        enemyBullets.push({
-          x: boss.x,
-          y: boss.y,
-          vx: Math.cos(bulletAngle) * 4.5,
-          vy: Math.sin(bulletAngle) * 4.5,
-          radius: 9,
-          damage: 16
-        });
-      }
-    }
-
-    if (Math.hypot(player.x - boss.x, player.y - boss.y) < player.radius + boss.radius) {
-      player.hp -= boss.damage * 0.1;
-    }
-  }
-
   for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i];
-    const target = getNearestTarget(b.x, b.y);
-
-    if (target) {
-      const targetAngle = Math.atan2(target.y - b.y, target.x - b.x);
-      const curSpeed = Math.hypot(b.vx, b.vy);
-      b.vx = b.vx * 0.75 + Math.cos(targetAngle) * curSpeed * 0.25;
-      b.vy = b.vy * 0.75 + Math.sin(targetAngle) * curSpeed * 0.25;
-    }
-
     b.x += b.vx;
     b.y += b.vy;
     b.life--;
@@ -1030,94 +1327,49 @@ function update() {
       continue;
     }
 
+    if (opponentPlayer && opponentPlayer.hp > 0) {
+      if (Math.hypot(b.x - opponentPlayer.x, b.y - opponentPlayer.y) < b.radius + opponentPlayer.radius) {
+        opponentPlayer.hp -= b.damage;
+        sounds.playHit();
+
+        damageTexts.push({
+          x: opponentPlayer.x,
+          y: opponentPlayer.y - 30,
+          text: Math.floor(b.damage),
+          color: '#ffd700',
+          life: 30
+        });
+
+        if (opponentPlayer.hp <= 0) {
+          opponentPlayer.hp = 0;
+          stageKills++;
+          checkStageClear();
+        }
+
+        bullets.splice(i, 1);
+        continue;
+      }
+    }
+
     for (let m = mobs.length - 1; m >= 0; m--) {
       const mob = mobs[m];
       if (Math.hypot(b.x - mob.x, b.y - mob.y) < b.radius + mob.radius) {
         mob.hp -= b.damage;
-        mob.hitFlash = 4;
         sounds.playHit();
 
-        damageTexts.push({
-          x: mob.x,
-          y: mob.y - 20,
-          text: Math.floor(b.damage),
-          color: b.isUlt ? '#ffd700' : '#ffffff',
-          life: 30
-        });
-
-        for (let p = 0; p < 4; p++) {
-          particles.push({
-            x: mob.x,
-            y: mob.y,
-            vx: (Math.random() - 0.5) * 6,
-            vy: (Math.random() - 0.5) * 6,
-            radius: Math.random() * 3 + 1,
-            color: b.color,
-            life: 20
-          });
-        }
-
         if (mob.hp <= 0) {
-          bloodSplatters.push({
-            x: mob.x,
-            y: mob.y,
-            radius: mob.radius * (0.8 + Math.random() * 0.4)
-          });
-
-          gems.push({
-            x: mob.x,
-            y: mob.y,
-            value: mob.isTank ? 30 : 12
-          });
-
+          // Drop Visually Glowing Blue Diamond XP Gem
+          gems.push({ x: mob.x, y: mob.y, value: 12 });
           player.kills++;
-          stageKills++;
-          checkStageClear();
-
-          player.ultGauge = Math.min(player.maxUltGauge, player.ultGauge + (mob.isTank ? 10 : 4));
-          if (player.ultGauge >= player.maxUltGauge) {
-            ui.ultBtn.disabled = false;
-            ui.ultBtn.classList.add('ready');
+          if (currentMatchMode === 'PVE') {
+            stageKills++;
+            checkStageClear();
           }
-
           mobs.splice(m, 1);
-          sounds.playExplosion();
         }
 
-        b.pierce--;
-        if (b.pierce <= 0) {
-          bullets.splice(i, 1);
-          break;
-        }
-      }
-    }
-
-    if (boss && Math.hypot(b.x - boss.x, b.y - boss.y) < b.radius + boss.radius) {
-      boss.hp -= b.damage;
-      boss.hitFlash = 4;
-      sounds.playHit();
-
-      damageTexts.push({
-        x: boss.x,
-        y: boss.y - 50,
-        text: Math.floor(b.damage),
-        color: '#ff0055',
-        life: 35
-      });
-
-      if (boss.hp <= 0) {
-        triggerScreenShake(32, 60);
-        sounds.playExplosion(true);
-        boss = null;
-        ui.bossHpContainer.classList.add('hidden');
-        player.kills += 50;
-        stageKills += 5;
-        checkStageClear();
-      }
-
-      b.pierce--;
-      if (b.pierce <= 0) {
         bullets.splice(i, 1);
+        break;
       }
     }
   }
@@ -1128,29 +1380,27 @@ function update() {
     eb.y += eb.vy;
 
     if (Math.hypot(eb.x - player.x, eb.y - player.y) < eb.radius + player.radius) {
-      player.hp -= eb.damage;
+      const netDamage = Math.max(1, eb.damage * (1 - dmgReduction));
+      player.hp -= netDamage;
       sounds.playHit();
       enemyBullets.splice(i, 1);
       if (player.hp <= 0) gameOver();
       continue;
     }
-
-    if (Math.hypot(eb.x - player.x, eb.y - player.y) > 1200) {
-      enemyBullets.splice(i, 1);
-    }
   }
 
+  // XP Gems Magnet Attraction Logic
   for (let i = gems.length - 1; i >= 0; i--) {
     const g = gems[i];
-    const dist = Math.hypot(player.x - g.x, player.y - g.y);
+    const d = Math.hypot(player.x - g.x, player.y - g.y);
 
-    if (dist < player.magnetRange) {
+    if (d < player.magnetRange) {
       const angle = Math.atan2(player.y - g.y, player.x - g.x);
-      g.x += Math.cos(angle) * 10;
-      g.y += Math.sin(angle) * 10;
+      g.x += Math.cos(angle) * 9;
+      g.y += Math.sin(angle) * 9;
     }
 
-    if (dist < player.radius + 15) {
+    if (d < player.radius + 15) {
       player.xp += g.value;
       sounds.playGem();
       gems.splice(i, 1);
@@ -1158,26 +1408,11 @@ function update() {
     }
   }
 
-  for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i];
-    p.x += p.vx || 0;
-    p.y += p.vy || 0;
-    p.life--;
-    if (p.life <= 0) particles.splice(i, 1);
-  }
-
-  for (let i = damageTexts.length - 1; i >= 0; i--) {
-    const dt = damageTexts[i];
-    dt.y -= 0.8;
-    dt.life--;
-    if (dt.life <= 0) damageTexts.splice(i, 1);
-  }
-
   updateHUD();
 }
 
 function updateHUD() {
-  ui.stageVal.textContent = currentStage;
+  ui.stageVal.textContent = currentMatchMode.startsWith('PVP') ? '1v1 MATCH' : `STAGE ${currentStage}`;
   ui.targetCounter.textContent = `${stageKills} / ${stageTargetKills}`;
 
   const mins = String(Math.floor(gameTime / 60)).padStart(2, '0');
@@ -1186,48 +1421,29 @@ function updateHUD() {
 
   ui.levelBadge.textContent = `LV ${player.level}`;
 
-  const xpPercent = Math.min(100, (player.xp / player.nextXp) * 100);
-  ui.xpBarFill.style.width = `${xpPercent}%`;
-
   const hpPercent = Math.max(0, Math.min(100, (player.hp / player.maxHp) * 100));
   ui.hpBarFill.style.width = `${hpPercent}%`;
   ui.hpText.textContent = `${Math.ceil(player.hp)} / ${player.maxHp}`;
 
-  const ultPercent = Math.min(100, (player.ultGauge / player.maxUltGauge) * 100);
-  ui.ultBarFill.style.width = `${ultPercent}%`;
-
-  if (boss) {
-    const bossHpPercent = Math.max(0, Math.min(100, (boss.hp / boss.maxHp) * 100));
-    ui.bossHpFill.style.width = `${bossHpPercent}%`;
-    ui.bossHpText.textContent = `${Math.ceil(bossHpPercent)}%`;
+  if (opponentPlayer) {
+    ui.p1HpVal.textContent = Math.ceil(player.hp);
+    ui.p2HpVal.textContent = Math.ceil(opponentPlayer.hp);
   }
 }
 
 function gameOver() {
   currentState = GameState.GAME_OVER;
-
-  if (player.kills > bestKills || gameTime > bestTime) {
-    bestKills = Math.max(bestKills, player.kills);
-    bestTime = Math.max(bestTime, gameTime);
-    localStorage.setItem('get_nav_best_kills', bestKills);
-    localStorage.setItem('get_nav_best_time', bestTime);
-
-    if (typeof authManager !== 'undefined') {
-      authManager.saveScore(bestKills, bestTime);
-    }
-  }
-
   const mins = String(Math.floor(gameTime / 60)).padStart(2, '0');
   const secs = String(Math.floor(gameTime % 60)).padStart(2, '0');
 
-  ui.finalStage.textContent = `STAGE ${currentStage}`;
+  ui.finalStage.textContent = currentMatchMode.startsWith('PVP') ? '1v1 패배' : `STAGE ${currentStage}`;
   ui.finalTime.textContent = `${mins}:${secs}`;
   ui.finalKills.textContent = player.kills;
 
   ui.gameoverModal.classList.remove('hidden');
 }
 
-// --- Render Canvas ---
+// Render Canvas
 function draw() {
   ctx.save();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1255,106 +1471,47 @@ function draw() {
     }
   }
 
-  bloodSplatters.forEach(bs => {
-    ctx.fillStyle = 'rgba(50, 60, 40, 0.45)';
-    ctx.beginPath();
-    ctx.arc(bs.x, bs.y, bs.radius, 0, Math.PI * 2);
-    ctx.fill();
-  });
-
-  gems.forEach(g => {
-    ctx.fillStyle = '#00f0ff';
-    ctx.shadowColor = '#00f0ff';
-    ctx.shadowBlur = 12;
-    ctx.beginPath();
-    ctx.arc(g.x, g.y, 7, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-  });
-
-  if (player.skills.orbitShield > 0) {
-    const shieldCount = player.skills.orbitShield;
-    const shieldOrbitRadius = 110;
-
+  // Render Narrow 1v1 Arena Plasma Fence
+  if (isPvpNarrowArenaActive) {
     ctx.save();
-    ctx.strokeStyle = 'rgba(255, 215, 0, 0.35)';
-    ctx.lineWidth = 4;
-    ctx.shadowColor = '#ffd700';
-    ctx.shadowBlur = 20;
+    ctx.strokeStyle = '#ff0055';
+    ctx.lineWidth = 6;
+    ctx.shadowBlur = 25;
+    ctx.shadowColor = '#ff0055';
     ctx.beginPath();
-    ctx.arc(player.x, player.y, shieldOrbitRadius, 0, Math.PI * 2);
+    ctx.arc(0, 0, 320, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
-
-    for (let i = 0; i < shieldCount; i++) {
-      const shieldAngle = gameTime * 3 + (i / shieldCount) * Math.PI * 2;
-      const sx = player.x + Math.cos(shieldAngle) * shieldOrbitRadius;
-      const sy = player.y + Math.sin(shieldAngle) * shieldOrbitRadius;
-
-      ctx.save();
-      ctx.translate(sx, sy);
-      ctx.rotate(shieldAngle + Math.PI / 2);
-
-      ctx.fillStyle = '#ffd700';
-      ctx.shadowColor = '#ffd700';
-      ctx.shadowBlur = 22;
-
-      ctx.beginPath();
-      ctx.moveTo(0, -18);
-      ctx.lineTo(12, 0);
-      ctx.lineTo(0, 18);
-      ctx.lineTo(-12, 0);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      ctx.restore();
-    }
   }
 
-  bullets.forEach(b => {
-    if (b.isLaser && b.target) {
-      ctx.save();
-      ctx.strokeStyle = '#ff0077';
-      ctx.shadowColor = '#ff0077';
-      ctx.shadowBlur = 25;
-      ctx.lineWidth = 8;
+  // Render High Visibility XP Gems (Bright Glowing Cyan Diamonds)
+  gems.forEach(g => {
+    ctx.save();
+    ctx.shadowBlur = 18;
+    ctx.shadowColor = '#00f0ff';
+    ctx.fillStyle = '#00f0ff';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
 
-      ctx.beginPath();
-      ctx.moveTo(player.x, player.y);
-      const midX = (player.x + b.target.x) / 2 + (Math.sin(gameTime * 10) * 40);
-      const midY = (player.y + b.target.y) / 2 + (Math.cos(gameTime * 10) * 40);
-      ctx.quadraticCurveTo(midX, midY, b.target.x, b.target.y);
-      ctx.stroke();
-
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-      ctx.restore();
-    }
+    ctx.beginPath();
+    ctx.moveTo(g.x, g.y - 12);
+    ctx.lineTo(g.x + 10, g.y);
+    ctx.lineTo(g.x, g.y + 12);
+    ctx.lineTo(g.x - 10, g.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
   });
 
+  // Render Player 1 (Blue Arrow)
   ctx.save();
   ctx.translate(player.x, player.y);
   ctx.rotate(player.angle);
 
-  ctx.fillStyle = '#ff5500';
-  ctx.beginPath();
-  ctx.moveTo(-player.radius - 8, -6);
-  ctx.lineTo(-player.radius - 24 - Math.random() * 8, 0);
-  ctx.lineTo(-player.radius - 8, 6);
-  ctx.fill();
-
   ctx.fillStyle = '#00f0ff';
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 3.5;
-  ctx.shadowColor = '#00f0ff';
-  ctx.shadowBlur = 20;
-
   ctx.beginPath();
   ctx.moveTo(player.radius + 14, 0);
   ctx.lineTo(-player.radius, -player.radius + 4);
@@ -1363,108 +1520,53 @@ function draw() {
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
-  ctx.shadowBlur = 0;
 
   ctx.restore();
 
-  mobs.forEach(mob => {
+  // Render Player 2 Opponent (Red Arrow) in 1v1 PvP
+  if (opponentPlayer && opponentPlayer.hp > 0) {
     ctx.save();
-    ctx.translate(mob.x, mob.y);
+    ctx.translate(opponentPlayer.x, opponentPlayer.y);
+    ctx.rotate(opponentPlayer.angle);
 
-    if (mob.hitFlash > 0) {
-      ctx.filter = 'brightness(2.5)';
-    }
-
-    const renderSize = mob.radius * 2.4;
-    if (assetsLoaded && mobCanvas) {
-      ctx.drawImage(mobCanvas, -renderSize / 2, -renderSize / 2, renderSize, renderSize);
-    } else {
-      ctx.fillStyle = '#888';
-      ctx.beginPath();
-      ctx.arc(0, 0, mob.radius, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    ctx.restore();
-  });
-
-  if (boss) {
-    ctx.save();
-    ctx.translate(boss.x, boss.y);
-
-    ctx.shadowColor = '#ff0055';
-    ctx.shadowBlur = 40;
-
-    if (boss.hitFlash > 0) {
-      ctx.filter = 'brightness(3)';
-    }
-
-    const renderSize = boss.radius * 2.4;
-    if (assetsLoaded && bossCanvas) {
-      ctx.drawImage(bossCanvas, -renderSize / 2, -renderSize / 2, renderSize, renderSize);
-    } else {
-      ctx.fillStyle = '#ff0055';
-      ctx.beginPath();
-      ctx.arc(0, 0, boss.radius, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    ctx.fillStyle = '#ff0055';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(opponentPlayer.radius + 14, 0);
+    ctx.lineTo(-opponentPlayer.radius, -opponentPlayer.radius + 4);
+    ctx.lineTo(-opponentPlayer.radius + 8, 0);
+    ctx.lineTo(-opponentPlayer.radius, opponentPlayer.radius - 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
 
     ctx.restore();
   }
 
-  bullets.forEach(b => {
-    if (!b.isLaser) {
-      ctx.save();
-      ctx.translate(b.x, b.y);
-
-      if (b.isMissile) {
-        const missileAngle = Math.atan2(b.vy, b.vx);
-        ctx.rotate(missileAngle);
-
-        ctx.fillStyle = '#ffd700';
-        ctx.shadowColor = '#ff5500';
-        ctx.shadowBlur = 15;
-        ctx.fillRect(-12, -4, 24, 8);
-
-        ctx.fillStyle = '#ff3300';
-        ctx.beginPath();
-        ctx.arc(-14, 0, 5, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        ctx.fillStyle = b.color;
-        ctx.shadowColor = b.color;
-        ctx.shadowBlur = 16;
-        ctx.beginPath();
-        ctx.arc(0, 0, b.radius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      ctx.restore();
+  // Render Mobs
+  mobs.forEach(mob => {
+    ctx.save();
+    ctx.translate(mob.x, mob.y);
+    const renderSize = mob.radius * 2.4;
+    if (assetsLoaded && mobCanvas) {
+      ctx.drawImage(mobCanvas, -renderSize / 2, -renderSize / 2, renderSize, renderSize);
     }
+    ctx.restore();
+  });
+
+  // Render Bullets
+  bullets.forEach(b => {
+    ctx.fillStyle = b.color;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+    ctx.fill();
   });
 
   enemyBullets.forEach(eb => {
     ctx.fillStyle = '#ff0055';
-    ctx.shadowColor = '#ff0055';
-    ctx.shadowBlur = 12;
     ctx.beginPath();
     ctx.arc(eb.x, eb.y, eb.radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-  });
-
-  damageTexts.forEach(dt => {
-    ctx.font = '900 20px Orbitron';
-    ctx.fillStyle = dt.color;
-    ctx.shadowColor = '#000';
-    ctx.shadowBlur = 4;
-    ctx.fillText(dt.text, dt.x - 12, dt.y);
-  });
-
-  particles.forEach(p => {
-    ctx.fillStyle = p.color;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
     ctx.fill();
   });
 
