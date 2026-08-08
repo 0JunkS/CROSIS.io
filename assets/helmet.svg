@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <linearGradient id="helmGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+  </defs>
+  <path d="M 20 50 Q 20 15 50 15 Q 80 15 80 50 L 85 70 L 15 70 Z" fill="url(#helmGrad)" stroke="#ffffff" stroke-width="4"/>
+  <rect x="30" y="45" width="40" height="10" rx="4" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/>
+  <text x="50" y="88" font-family="sans-serif" font-weight="900" font-size="12" fill="#ffffff" text-anchor="middle">HELMET</text>
+</svg>

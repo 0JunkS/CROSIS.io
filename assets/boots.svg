@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <linearGradient id="bootGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f43f5e"/>
+      <stop offset="100%" stop-color="#9f1239"/>
+    </linearGradient>
+  </defs>
+  <path d="M 25 20 L 55 20 L 55 55 L 85 65 L 85 85 L 15 85 L 15 60 L 25 50 Z" fill="url(#bootGrad)" stroke="#ffffff" stroke-width="4"/>
+  <text x="50" y="96" font-family="sans-serif" font-weight="900" font-size="11" fill="#ffffff" text-anchor="middle">BOOTS</text>
+</svg>

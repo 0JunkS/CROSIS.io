@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <linearGradient id="sedanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff00bb"/>
+      <stop offset="50%" stop-color="#7000ff"/>
+      <stop offset="100%" stop-color="#2a0066"/>
+    </linearGradient>
+  </defs>
+  <path d="M 50 2 L 95 25 L 85 85 L 50 98 L 15 85 L 5 25 Z" fill="url(#sedanGrad)" stroke="#ffd700" stroke-width="4"/>
+  <polygon points="50,15 65,40 90,40 70,60 80,85 50,70 20,85 30,60 10,40 35,40" fill="#ff0077" stroke="#ffffff" stroke-width="2"/>
+  <text x="50" y="55" font-family="sans-serif" font-weight="900" font-size="13" fill="#ffffff" text-anchor="middle">SEDAN</text>
+</svg>
